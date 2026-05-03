@@ -1,0 +1,30 @@
+{
+  "datasets": [
+    {
+      "name": "mta_gtfs_static_subway",
+      "type": "zip",
+      "url": "https://rrgtfsfeeds.s3.amazonaws.com/gtfs_subway.zip",
+      "refresh": "weekly",
+      "store": "data/raw/gtfs_static/",
+      "filename": "gtfs_subway.zip"
+    },
+    {
+      "name": "subway_entrances_exits",
+      "type": "socrata",
+      "domain": "data.ny.gov",
+      "dataset_id": "i9wp-a4ja",
+      "refresh": "monthly",
+      "store": "data/raw/socrata/subway_entrances_exits/",
+      "filename": "subway_entrances_exits.csv"
+    },
+    {
+      "name": "subway_hourly_ridership",
+      "type": "socrata",
+      "domain": "data.ny.gov",
+      "dataset_id": "5wq4-mkjj",
+      "refresh": "daily_or_weekly",
+      "store": "data/raw/socrata/subway_hourly_ridership/",
+      "filename": "subway_hourly_ridership.csv"
+    }
+  ]
+}

@@ -8,6 +8,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
+    "data:download": "tsx scripts/import_all.ts",
+    "data:download:gtfs": "tsx scripts/download_static_gtfs.ts",
+    "data:download:socrata": "tsx scripts/download_socrata_dataset.ts",
     "start": "next start",
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit"
