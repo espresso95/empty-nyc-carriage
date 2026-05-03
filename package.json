@@ -2,15 +2,24 @@
   "name": "empty-nyc-carriage",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24.8.0 <25",
+    "npm": ">=11.6.0 <12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "setup:local": "tsx scripts/setup_local.ts",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
+    "bootstrap": "npm run setup:local && npm run db:up && npm run db:migrate && npm run db:seed",
     "data:download": "tsx scripts/import_all.ts",
     "data:download:gtfs": "tsx scripts/download_static_gtfs.ts",
     "data:download:socrata": "tsx scripts/download_socrata_dataset.ts",
+    "data:bootstrap": "npm run data:download && npm run data:import && npm run data:build-zone-profiles && npm run data:validate-zone-profiles",
     "data:import": "npm run data:import:gtfs && npm run data:import:entrances",
     "data:import:gtfs": "tsx scripts/import_static_gtfs.ts",
     "data:import:entrances": "tsx scripts/import_socrata_entrances.ts",
@@ -18,7 +27,8 @@
     "data:validate-zone-profiles": "tsx scripts/validate_zone_profiles.ts",
     "start": "next start",
     "test": "vitest run",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "verify": "npm test && npm run typecheck && npm run build"
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.2.4",
