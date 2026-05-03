@@ -3,16 +3,45 @@ import {
   boolean,
   check,
   doublePrecision,
+  jsonb,
   index,
   integer,
-  jsonb,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { Confidence, FeatureContributions, Zone, ZoneScoreMap } from "@/src/lib/prediction/scorer";
+import type {
+  Confidence,
+  FeatureContributions,
+  Zone,
+  ZoneScoreMap,
+} from "../lib/prediction/scorer";
+
+export const gtfsRoutes = pgTable("gtfs_routes", {
+  routeId: text("route_id").primaryKey(),
+  routeShortName: text("route_short_name").notNull(),
+  routeLongName: text("route_long_name"),
+  routeColor: text("route_color"),
+  routeTextColor: text("route_text_color"),
+});
+
+export const gtfsStops = pgTable(
+  "gtfs_stops",
+  {
+    stopId: text("stop_id").primaryKey(),
+    stopName: text("stop_name").notNull(),
+    stopLat: doublePrecision("stop_lat"),
+    stopLon: doublePrecision("stop_lon"),
+    locationType: integer("location_type").notNull().default(0),
+    parentStation: text("parent_station"),
+  },
+  (table) => [
+    index("gtfs_stops_parent_station_idx").on(table.parentStation),
+    index("gtfs_stops_name_idx").on(table.stopName),
+  ],
+);
 
 export const stations = pgTable(
   "stations",
@@ -26,6 +55,33 @@ export const stations = pgTable(
     routes: jsonb("routes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   },
   (table) => [index("stations_name_idx").on(table.name)],
+);
+
+export const entrancesExits = pgTable(
+  "entrances_exits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    stationId: text("station_id").notNull(),
+    stopName: text("stop_name").notNull(),
+    complexId: text("complex_id"),
+    gtfsStopId: text("gtfs_stop_id"),
+    daytimeRoutes: jsonb("daytime_routes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    entranceType: text("entrance_type"),
+    entryAllowed: boolean("entry_allowed").notNull().default(false),
+    exitAllowed: boolean("exit_allowed").notNull().default(false),
+    lat: doublePrecision("lat").notNull(),
+    lon: doublePrecision("lon").notNull(),
+  },
+  (table) => [
+    index("entrances_exits_station_id_idx").on(table.stationId),
+    index("entrances_exits_gtfs_stop_id_idx").on(table.gtfsStopId),
+    uniqueIndex("entrances_exits_unique_location_idx").on(
+      table.stationId,
+      table.lat,
+      table.lon,
+      table.entranceType,
+    ),
+  ],
 );
 
 export const stationZoneProfiles = pgTable(

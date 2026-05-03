@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { parseCsvRecords } from "./csv";
 
 export type RefreshCadence = "daily" | "weekly" | "daily_or_weekly" | "monthly" | "manual";
 
@@ -22,6 +23,7 @@ export type SocrataDataset = {
   filename: string;
   format?: "csv" | "json";
   limit?: number;
+  page_size?: number;
 };
 
 export type DatasetConfig = ZipDataset | SocrataDataset;
@@ -38,6 +40,8 @@ export type DownloadResult = {
 };
 
 type FetchLike = (url: string) => Promise<Pick<Response, "arrayBuffer" | "ok" | "status" | "statusText">>;
+
+const SOCRATA_PAGE_LIMIT = 50_000;
 
 export async function loadDatasetManifest(
   manifestPath = "dataset_manifest.json",
@@ -111,6 +115,10 @@ export async function downloadDataset(
     fetcher?: FetchLike;
   } = {},
 ): Promise<DownloadResult> {
+  if (dataset.type === "socrata" && (dataset.format ?? "csv") === "csv") {
+    return downloadPagedSocrataCsv(dataset, options);
+  }
+
   const fetcher = options.fetcher ?? fetch;
   const url = buildDatasetDownloadUrl(dataset);
   const outputPath = resolveDatasetOutputPath(dataset, options.cwd);
@@ -131,4 +139,102 @@ export async function downloadDataset(
     path: outputPath,
     bytes: buffer.byteLength,
   };
+}
+
+async function downloadPagedSocrataCsv(
+  dataset: SocrataDataset,
+  options: {
+    cwd?: string;
+    fetcher?: FetchLike;
+  },
+): Promise<DownloadResult> {
+  const fetcher = options.fetcher ?? fetch;
+  const outputPath = resolveDatasetOutputPath(dataset, options.cwd);
+  const maxRows = dataset.limit;
+  const pageLimit = Math.min(
+    dataset.page_size ?? SOCRATA_PAGE_LIMIT,
+    maxRows ?? SOCRATA_PAGE_LIMIT,
+    SOCRATA_PAGE_LIMIT,
+  );
+  let offset = 0;
+  let rowsWritten = 0;
+  let bytesWritten = 0;
+  let wroteHeader = false;
+  let outputEndsWithNewline = false;
+
+  await mkdir(path.dirname(outputPath), { recursive: true });
+
+  while (maxRows === undefined || rowsWritten < maxRows) {
+    const requestedRows = Math.min(pageLimit, maxRows === undefined ? pageLimit : maxRows - rowsWritten);
+    const pageUrl = buildSocrataPageUrl(dataset, requestedRows, offset);
+    const response = await fetcher(pageUrl);
+
+    if (!response.ok) {
+      throw new Error(`Failed to download ${dataset.name}: ${response.status} ${response.statusText}`);
+    }
+
+    const pageCsv = Buffer.from(await response.arrayBuffer()).toString("utf8");
+    const pageRowCount = countCsvRows(pageCsv);
+    const chunk = wroteHeader ? stripCsvHeader(pageCsv) : pageCsv;
+    const chunkForWrite: string = wroteHeader && chunk && !outputEndsWithNewline ? `\n${chunk}` : chunk;
+
+    if (chunkForWrite) {
+      if (wroteHeader) {
+        await appendFile(outputPath, chunkForWrite);
+      } else {
+        await writeFile(outputPath, chunkForWrite);
+      }
+
+      wroteHeader = true;
+      bytesWritten += Buffer.byteLength(chunkForWrite);
+      outputEndsWithNewline = chunkForWrite.endsWith("\n") || chunkForWrite.endsWith("\r");
+    }
+
+    rowsWritten += pageRowCount;
+
+    if (pageRowCount < requestedRows) {
+      break;
+    }
+
+    offset += pageRowCount;
+  }
+
+  if (!wroteHeader) {
+    await writeFile(outputPath, "");
+  }
+
+  return {
+    datasetName: dataset.name,
+    url: buildDatasetDownloadUrl(dataset),
+    path: outputPath,
+    bytes: bytesWritten,
+  };
+}
+
+function buildSocrataPageUrl(dataset: SocrataDataset, limit: number, offset: number): string {
+  const url = new URL(buildSocrataExportUrl({ ...dataset, limit }));
+
+  if (offset > 0) {
+    url.searchParams.set("$offset", String(offset));
+  }
+
+  return url.toString();
+}
+
+function countCsvRows(csvText: string): number {
+  if (!csvText.trim()) {
+    return 0;
+  }
+
+  return parseCsvRecords(csvText).length;
+}
+
+function stripCsvHeader(csvText: string): string {
+  const newlineIndex = csvText.search(/\r?\n/);
+
+  if (newlineIndex === -1) {
+    return "";
+  }
+
+  return csvText.slice(csvText[newlineIndex] === "\r" ? newlineIndex + 2 : newlineIndex + 1);
 }

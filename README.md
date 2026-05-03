@@ -1,6 +1,6 @@
 # Empty NYC Carriage
 
-Phase 0 scaffold for a subway platform-zone recommendation app.
+Subway platform-zone recommendation app.
 
 ## Development
 
@@ -20,12 +20,26 @@ npm run db:seed
 
 ## Data Downloads
 
-Phase 3 starts with manifest-driven downloads. Full datasets are written to gitignored `data/raw/` paths.
+Phase 3 adds manifest-driven downloads, static imports, station search, and generated zone profiles. Full datasets are written to gitignored `data/raw/` paths.
 
 ```bash
 npm run data:download
 npm run data:download:gtfs
 npm run data:download:socrata
+```
+
+Import downloaded datasets and generate zone profiles:
+
+```bash
+npm run data:import
+npm run data:build-zone-profiles
+npm run data:validate-zone-profiles
+```
+
+Station search is available at:
+
+```text
+GET /api/stations/search?q=bedford
 ```
 
 ## Verification

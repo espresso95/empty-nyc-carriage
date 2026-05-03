@@ -74,6 +74,102 @@ describe("dataset manifest helpers", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("downloads Socrata CSV datasets in pages so full exports are not truncated", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "empty-carriage-data-"));
+    const requestedUrls: string[] = [];
+
+    try {
+      const dataset: SocrataDataset = {
+        name: "subway_entrances_exits",
+        type: "socrata",
+        domain: "data.ny.gov",
+        dataset_id: "i9wp-a4ja",
+        refresh: "monthly",
+        store: "data/raw/socrata/subway_entrances_exits/",
+        filename: "subway_entrances_exits.csv",
+        limit: 2,
+      };
+      const result = await downloadDataset(dataset, {
+        cwd: tempDir,
+        fetcher: async (url) => {
+          requestedUrls.push(url);
+
+          return new Response(
+            [
+              "station_id,stop_name",
+              "135,Bedford Av",
+              "136,1 Av",
+            ].join("\n"),
+            {
+              status: 200,
+              statusText: "OK",
+            },
+          );
+        },
+      });
+
+      await expect(readFile(result.path, "utf8")).resolves.toBe(
+        ["station_id,stop_name", "135,Bedford Av", "136,1 Av"].join("\n"),
+      );
+      expect(requestedUrls).toEqual(["https://data.ny.gov/resource/i9wp-a4ja.csv?%24limit=2"]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("removes repeated Socrata headers when appending later pages", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "empty-carriage-data-"));
+    const requestedUrls: string[] = [];
+
+    try {
+      const dataset: SocrataDataset = {
+        name: "subway_entrances_exits",
+        type: "socrata",
+        domain: "data.ny.gov",
+        dataset_id: "i9wp-a4ja",
+        refresh: "monthly",
+        store: "data/raw/socrata/subway_entrances_exits/",
+        filename: "subway_entrances_exits.csv",
+        page_size: 2,
+      };
+      const result = await downloadDataset(dataset, {
+        cwd: tempDir,
+        fetcher: async (url) => {
+          requestedUrls.push(url);
+
+          if (url.includes("%24offset=2")) {
+            return new Response(["station_id,stop_name", "137,3 Av"].join("\n"), {
+              status: 200,
+              statusText: "OK",
+            });
+          }
+
+          return new Response(
+            [
+              "station_id,stop_name",
+              "135,Bedford Av",
+              "136,1 Av",
+            ].join("\n"),
+            {
+              status: 200,
+              statusText: "OK",
+            },
+          );
+        },
+      });
+
+      await expect(readFile(result.path, "utf8")).resolves.toBe(
+        ["station_id,stop_name", "135,Bedford Av", "136,1 Av", "137,3 Av"].join("\n"),
+      );
+      expect(requestedUrls).toEqual([
+        "https://data.ny.gov/resource/i9wp-a4ja.csv?%24limit=2",
+        "https://data.ny.gov/resource/i9wp-a4ja.csv?%24limit=2&%24offset=2",
+      ]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 function makeManifest(): DatasetManifest {

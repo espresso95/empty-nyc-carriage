@@ -11,12 +11,19 @@
     "data:download": "tsx scripts/import_all.ts",
     "data:download:gtfs": "tsx scripts/download_static_gtfs.ts",
     "data:download:socrata": "tsx scripts/download_socrata_dataset.ts",
+    "data:import": "npm run data:import:gtfs && npm run data:import:entrances",
+    "data:import:gtfs": "tsx scripts/import_static_gtfs.ts",
+    "data:import:entrances": "tsx scripts/import_socrata_entrances.ts",
+    "data:build-zone-profiles": "tsx scripts/build_zone_profiles.ts",
+    "data:validate-zone-profiles": "tsx scripts/validate_zone_profiles.ts",
     "start": "next start",
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.2.4",
+    "adm-zip": "0.5.17",
+    "csv-parse": "6.2.1",
     "drizzle-orm": "0.45.2",
     "next": "16.2.4",
     "pg": "8.20.0",
@@ -28,6 +35,7 @@
     "postcss": "8.5.13"
   },
   "devDependencies": {
+    "@types/adm-zip": "0.5.8",
     "@types/node": "24.10.1",
     "@types/pg": "8.20.0",
     "@types/react": "19.2.14",
