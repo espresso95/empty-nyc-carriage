@@ -1,57 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { bedfordRecommendation, bedfordTrains } from "@/src/lib/fixtures/bedford";
+import { PLATFORM_DISPLAY_ZONES, type Zone } from "@/src/lib/prediction/scorer";
 
-const zones = ["rear", "rear-middle", "middle", "front-middle", "front"] as const;
-
-type Zone = (typeof zones)[number];
+const zones = PLATFORM_DISPLAY_ZONES;
 type Step = "setup" | "trains" | "recommendation" | "feedback";
-
-const recommendation = {
-  station: "Bedford Av",
-  route: "L",
-  direction: "Manhattan-bound",
-  destination: "14 St-Union Sq",
-  train: {
-    label: "L train",
-    arrivesIn: 3,
-    followingGap: 7,
-    tripId: "fixture-l-bedford-001",
-  },
-  recommendedZone: "rear-middle" as Zone,
-  confidence: "medium",
-  scores: {
-    rear: 0.44,
-    "rear-middle": 0.38,
-    middle: 0.61,
-    "front-middle": 0.74,
-    front: 0.82,
-  } satisfies Record<Zone, number>,
-  why: [
-    "Main entrances are weighted toward the front of the platform.",
-    "This train is following a longer-than-usual gap.",
-    "This hour is above normal demand for the station.",
-  ],
-};
-
-const trains = [
-  {
-    id: recommendation.train.tripId,
-    label: "L train",
-    direction: recommendation.direction,
-    arrivesIn: 3,
-    followingGap: 7,
-    estimate: "medium-high",
-  },
-  {
-    id: "fixture-l-bedford-002",
-    label: "L train",
-    direction: recommendation.direction,
-    arrivesIn: 8,
-    followingGap: 5,
-    estimate: "medium",
-  },
-];
+const recommendation = bedfordRecommendation;
+const trains = bedfordTrains;
 
 export default function Home() {
   const [step, setStep] = useState<Step>("setup");
@@ -232,6 +188,7 @@ function RecommendationStep({
   const sortedZones = [...zones].sort(
     (a, b) => recommendation.scores[a] - recommendation.scores[b],
   );
+  const maxScore = Math.max(...zones.map((zone) => recommendation.scores[zone]));
 
   return (
     <div className="animate-[rise_420ms_ease-out]">
@@ -280,7 +237,7 @@ function RecommendationStep({
                 <div className="mt-1 h-2 rounded-full bg-white/15">
                   <div
                     className="h-2 rounded-full bg-[var(--signal)]"
-                    style={{ width: `${recommendation.scores[zone] * 100}%` }}
+                    style={{ width: `${(recommendation.scores[zone] / maxScore) * 100}%` }}
                   />
                 </div>
               </div>
