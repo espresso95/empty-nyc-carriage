@@ -24,6 +24,7 @@ html {
     radial-gradient(circle at 18% 12%, rgb(255 106 61 / 28%), transparent 28rem),
     radial-gradient(circle at 82% 8%, rgb(142 207 182 / 36%), transparent 24rem),
     linear-gradient(135deg, #f7eddb 0%, #efe0c4 48%, #d9e6df 100%);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -41,6 +42,8 @@ select {
 
 button {
   cursor: pointer;
+  min-height: 44px;
+  touch-action: manipulation;
 }
 
 ::selection {

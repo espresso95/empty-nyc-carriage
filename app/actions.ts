@@ -2,6 +2,8 @@
 
 import { cookies } from "next/headers";
 import { bedfordPredictionContext, bedfordTrip } from "@/src/lib/fixtures/bedford";
+import { getDashboardRepository } from "@/src/lib/dashboard/drizzle-repository";
+import { buildDashboardSummary, type DashboardSummary } from "@/src/lib/dashboard/summary";
 import { createObservation, createPrediction } from "@/src/lib/persistence/prediction-service";
 import { getPredictionRepository } from "@/src/lib/persistence/drizzle-repository";
 import type { Zone } from "@/src/lib/prediction/scorer";
@@ -18,6 +20,16 @@ type ActionResult =
   | {
       ok: false;
       persisted: false;
+      error: string;
+    };
+
+type DashboardActionResult =
+  | {
+      ok: true;
+      summary: DashboardSummary;
+    }
+  | {
+      ok: false;
       error: string;
     };
 
@@ -88,6 +100,32 @@ export async function createObservationAction(input: {
     };
   } catch (error) {
     return persistenceErrorResult(error);
+  }
+}
+
+export async function loadDashboardAction(): Promise<DashboardActionResult> {
+  const repository = getDashboardRepository();
+
+  if (!repository) {
+    return {
+      ok: false,
+      error: "Set DATABASE_URL and run migrations to enable your dashboard.",
+    };
+  }
+
+  try {
+    const anonymousId = await getOrCreateAnonymousId();
+    const observations = await repository.listObservations(anonymousId);
+
+    return {
+      ok: true,
+      summary: buildDashboardSummary(observations),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Dashboard failed to load.",
+    };
   }
 }
 

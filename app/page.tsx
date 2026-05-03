@@ -1,16 +1,22 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createObservationAction, createPredictionAction } from "@/app/actions";
+import { createObservationAction, createPredictionAction, loadDashboardAction } from "@/app/actions";
+import type { DashboardSummary } from "@/src/lib/dashboard/summary";
 import { bedfordRecommendation, bedfordTrains } from "@/src/lib/fixtures/bedford";
 import { PLATFORM_DISPLAY_ZONES, type Zone } from "@/src/lib/prediction/scorer";
 
 const zones = PLATFORM_DISPLAY_ZONES;
-type Step = "setup" | "trains" | "recommendation" | "feedback";
+type Step = "setup" | "trains" | "recommendation" | "feedback" | "dashboard";
 type PersistenceState = {
   status: "idle" | "saving" | "persisted" | "unavailable" | "error";
   message: string;
   id?: string;
+};
+type DashboardState = {
+  status: "idle" | "loading" | "loaded" | "unavailable" | "error";
+  message: string;
+  summary?: DashboardSummary;
 };
 const recommendation = bedfordRecommendation;
 const trains = bedfordTrains;
@@ -27,6 +33,10 @@ export default function Home() {
   const [observationPersistence, setObservationPersistence] = useState<PersistenceState>({
     status: "idle",
     message: "Feedback has not been stored yet.",
+  });
+  const [dashboard, setDashboard] = useState<DashboardState>({
+    status: "idle",
+    message: "Dashboard has not been loaded yet.",
   });
   const [isPending, startTransition] = useTransition();
 
@@ -90,10 +100,38 @@ export default function Home() {
     });
   }
 
+  function handleLoadDashboard() {
+    setStep("dashboard");
+    setDashboard({
+      status: "loading",
+      message: "Loading your dashboard...",
+    });
+
+    startTransition(async () => {
+      const result = await loadDashboardAction();
+
+      if (result.ok) {
+        setDashboard({
+          status: "loaded",
+          message:
+            result.summary.observationCount > 0
+              ? "Dashboard loaded from your saved observations."
+              : "No saved observations yet.",
+          summary: result.summary,
+        });
+      } else {
+        setDashboard({
+          status: "unavailable",
+          message: result.error,
+        });
+      }
+    });
+  }
+
   return (
-    <main className="min-h-screen overflow-hidden px-4 py-5 sm:px-8 lg:px-12">
+    <main className="min-h-screen overflow-hidden px-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-8 lg:px-12">
       <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl flex-col">
-        <header className="flex items-center justify-between gap-4 py-4">
+        <header className="flex flex-col justify-between gap-4 py-3 sm:flex-row sm:items-center sm:py-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.34em] text-[var(--signal-dark)]">
               Zero-label heuristic v1
@@ -137,6 +175,14 @@ export default function Home() {
                 onSave={handleSaveObservation}
                 persistence={observationPersistence}
                 saving={isPending && observationPersistence.status === "saving"}
+                onDashboard={handleLoadDashboard}
+              />
+            )}
+            {step === "dashboard" && (
+              <DashboardStep
+                dashboard={dashboard}
+                onBack={() => setStep("feedback")}
+                onRefresh={handleLoadDashboard}
               />
             )}
           </section>
@@ -181,11 +227,11 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function Progress({ step }: { step: Step }) {
-  const steps: Step[] = ["setup", "trains", "recommendation", "feedback"];
+  const steps: Step[] = ["setup", "trains", "recommendation", "feedback", "dashboard"];
   const activeIndex = steps.indexOf(step);
 
   return (
-    <div className="mb-6 grid grid-cols-4 gap-2">
+    <div className="mb-6 grid grid-cols-5 gap-2">
       {steps.map((item, index) => (
         <div
           key={item}
@@ -376,6 +422,7 @@ function FeedbackStep({
   onCrowding,
   onBack,
   onSave,
+  onDashboard,
   persistence,
   saving,
 }: {
@@ -385,6 +432,7 @@ function FeedbackStep({
   onCrowding: (rating: number) => void;
   onBack: () => void;
   onSave: () => void;
+  onDashboard: () => void;
   persistence: PersistenceState;
   saving: boolean;
 }) {
@@ -442,7 +490,7 @@ function FeedbackStep({
 
       <PersistenceNotice state={persistence} />
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <BackButton onClick={onBack} />
         <button
           className="rounded-2xl bg-[var(--signal)] px-5 py-4 text-base font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--signal-dark)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
@@ -451,6 +499,215 @@ function FeedbackStep({
         >
           {saving ? "Saving..." : "Save feedback"}
         </button>
+        <button
+          className="rounded-2xl bg-[var(--ink)] px-5 py-4 text-base font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--blue)]"
+          onClick={onDashboard}
+        >
+          View dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DashboardStep({
+  dashboard,
+  onBack,
+  onRefresh,
+}: {
+  dashboard: DashboardState;
+  onBack: () => void;
+  onRefresh: () => void;
+}) {
+  const summary = dashboard.summary;
+
+  return (
+    <div className="animate-[rise_420ms_ease-out]">
+      <SectionLabel>Personal dashboard</SectionLabel>
+      <h2 className="mt-2 font-serif text-4xl tracking-[-0.05em] sm:text-5xl">
+        Check whether the heuristic is helping your rides.
+      </h2>
+
+      <DashboardNotice dashboard={dashboard} />
+
+      {summary && (
+        <>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <DashboardMetric
+              label="Observations"
+              value={String(summary.observationCount)}
+              detail="Saved feedback rows"
+            />
+            <DashboardMetric
+              label="Most common route"
+              value={summary.mostCommonRoute ?? "none"}
+              detail="From your observations"
+            />
+            <DashboardMetric
+              label="Follow rate"
+              value={formatPercent(summary.recommendationFollowRate)}
+              detail="Boarded recommended zone"
+            />
+            <DashboardMetric
+              label="Best rec"
+              value={summary.bestPerformingRecommendation ?? "none"}
+              detail="Lowest average crowding"
+            />
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+            <section className="rounded-3xl bg-[var(--ink)] p-5 text-white">
+              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--mint)]">
+                Following vs not
+              </h3>
+              <div className="mt-5 grid gap-3">
+                <CrowdingCompareRow
+                  label="Followed recommendation"
+                  value={summary.averageCrowdingWhenFollowing}
+                />
+                <CrowdingCompareRow
+                  label="Boarded elsewhere"
+                  value={summary.averageCrowdingOtherwise}
+                />
+              </div>
+            </section>
+
+            <section className="rounded-3xl bg-white/60 p-5">
+              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--signal-dark)]">
+                Your best boarded zones
+              </h3>
+              <div className="mt-4 space-y-3">
+                {summary.crowdingByBoardedZone.map((zone) => (
+                  <div key={zone.zone}>
+                    <div className="flex items-center justify-between gap-3 text-sm font-black">
+                      <span>{zone.zone}</span>
+                      <span>{formatCrowding(zone.averageCrowding)}</span>
+                    </div>
+                    <p className="mt-1 text-xs font-bold text-[var(--muted)]">
+                      {zone.observationCount} observation{zone.observationCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <section className="rounded-3xl bg-white/60 p-5">
+              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--signal-dark)]">
+                Route patterns
+              </h3>
+              <div className="mt-4 space-y-3">
+                {summary.routePatterns.length === 0 && (
+                  <p className="text-sm font-bold text-[var(--muted)]">No route patterns yet.</p>
+                )}
+                {summary.routePatterns.map((route) => (
+                  <div
+                    key={route.routeId}
+                    className="flex items-center justify-between rounded-2xl border border-[rgb(25_23_20_/_10%)] bg-white/55 px-4 py-3"
+                  >
+                    <span className="text-lg font-black">{route.routeId}</span>
+                    <span className="text-sm font-bold text-[var(--muted)]">
+                      {route.observationCount} rides / {formatCrowding(route.averageCrowding)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-3xl bg-white/60 p-5">
+              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--signal-dark)]">
+                Recent observations
+              </h3>
+              <div className="mt-4 space-y-3">
+                {summary.recentObservations.length === 0 && (
+                  <p className="text-sm font-bold text-[var(--muted)]">No saved feedback yet.</p>
+                )}
+                {summary.recentObservations.map((observation) => (
+                  <div
+                    key={`${observation.observedAt}-${observation.routeId}-${observation.boardedZone}`}
+                    className="rounded-2xl border border-[rgb(25_23_20_/_10%)] bg-white/55 px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-black">
+                        {observation.stationName ?? observation.stationId} / {observation.routeId}
+                      </p>
+                      <p className="text-sm font-black text-[var(--signal-dark)]">
+                        {observation.crowdingRating}/5
+                      </p>
+                    </div>
+                    <p className="mt-1 text-xs font-bold text-[var(--muted)]">
+                      Recommended {observation.recommendedZone}, boarded {observation.boardedZone}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </>
+      )}
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <BackButton onClick={onBack} />
+        <button
+          className="rounded-2xl bg-[var(--signal)] px-5 py-4 text-base font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--signal-dark)] disabled:cursor-wait disabled:opacity-60"
+          disabled={dashboard.status === "loading"}
+          onClick={onRefresh}
+        >
+          {dashboard.status === "loading" ? "Loading..." : "Refresh dashboard"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DashboardNotice({ dashboard }: { dashboard: DashboardState }) {
+  const tone =
+    dashboard.status === "loaded"
+      ? "border-[rgb(26_120_84_/_22%)] bg-[rgb(142_207_182_/_24%)] text-[rgb(19_95_66)]"
+      : dashboard.status === "loading"
+        ? "border-[rgb(32_79_122_/_20%)] bg-[rgb(32_79_122_/_9%)] text-[var(--blue)]"
+        : "border-[rgb(180_61_33_/_20%)] bg-[rgb(255_106_61_/_10%)] text-[var(--signal-dark)]";
+
+  return (
+    <div className={`mt-5 rounded-2xl border px-4 py-3 text-sm font-black ${tone}`}>
+      {dashboard.message}
+    </div>
+  );
+}
+
+function DashboardMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-[rgb(25_23_20_/_10%)] bg-white/60 p-5">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--muted)]">
+        {label}
+      </p>
+      <p className="mt-2 text-3xl font-black tracking-[-0.04em]">{value}</p>
+      <p className="mt-1 text-xs font-bold text-[var(--muted)]">{detail}</p>
+    </div>
+  );
+}
+
+function CrowdingCompareRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | null;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-black">{label}</span>
+        <span className="text-xl font-black">{formatCrowding(value)}</span>
       </div>
     </div>
   );
@@ -470,6 +727,14 @@ function PersistenceNotice({ state }: { state: PersistenceState }) {
       {state.id && <span className="ml-2 font-bold opacity-70">ID: {state.id}</span>}
     </div>
   );
+}
+
+function formatCrowding(value: number | null): string {
+  return value === null ? "none" : `${value.toFixed(1)}/5`;
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? "none" : `${Math.round(value * 100)}%`;
 }
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
