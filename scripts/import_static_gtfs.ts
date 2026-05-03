@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { deriveStationsFromGtfsStops, parseGtfsRoutesCsv, parseGtfsStopsCsv } from "../src/lib/data/gtfs";
 import { loadDatasetManifest, resolveDatasetOutputPath } from "../src/lib/data/manifest";
 import { readGtfsZipFiles } from "../src/lib/data/zip";

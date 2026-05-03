@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { getImportRepository } from "../src/lib/data/import-repository";
 import { summarizeZoneProfiles } from "../src/lib/data/validation";
 

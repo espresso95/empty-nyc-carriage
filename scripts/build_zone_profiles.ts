@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { getImportRepository } from "../src/lib/data/import-repository";
 import { generateZoneProfilesFromEntrances } from "../src/lib/data/zone-profile-generator";
 

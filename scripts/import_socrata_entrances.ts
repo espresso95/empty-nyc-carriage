@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { readFile } from "node:fs/promises";
 import { deriveStationsFromEntrances, parseEntrancesCsv } from "../src/lib/data/entrances";
 import { getImportRepository } from "../src/lib/data/import-repository";
