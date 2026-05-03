@@ -9,6 +9,15 @@ npm install
 npm run dev
 ```
 
+## Database
+
+Phase 2 persistence uses Postgres through Drizzle. Create `.env` from `.env.example`, then run:
+
+```bash
+npm run db:migrate
+npm run db:seed
+```
+
 ## Verification
 
 ```bash

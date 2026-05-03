@@ -1,11 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { createObservationAction, createPredictionAction } from "@/app/actions";
 import { bedfordRecommendation, bedfordTrains } from "@/src/lib/fixtures/bedford";
 import { PLATFORM_DISPLAY_ZONES, type Zone } from "@/src/lib/prediction/scorer";
 
 const zones = PLATFORM_DISPLAY_ZONES;
 type Step = "setup" | "trains" | "recommendation" | "feedback";
+type PersistenceState = {
+  status: "idle" | "saving" | "persisted" | "unavailable" | "error";
+  message: string;
+  id?: string;
+};
 const recommendation = bedfordRecommendation;
 const trains = bedfordTrains;
 
@@ -13,6 +19,76 @@ export default function Home() {
   const [step, setStep] = useState<Step>("setup");
   const [boardedZone, setBoardedZone] = useState<Zone | null>(null);
   const [crowding, setCrowding] = useState<number | null>(null);
+  const [predictionId, setPredictionId] = useState<string | null>(null);
+  const [predictionPersistence, setPredictionPersistence] = useState<PersistenceState>({
+    status: "idle",
+    message: "Prediction has not been stored yet.",
+  });
+  const [observationPersistence, setObservationPersistence] = useState<PersistenceState>({
+    status: "idle",
+    message: "Feedback has not been stored yet.",
+  });
+  const [isPending, startTransition] = useTransition();
+
+  function handleTrainSelect() {
+    setStep("recommendation");
+    setPredictionPersistence({
+      status: "saving",
+      message: "Storing prediction request...",
+    });
+
+    startTransition(async () => {
+      const result = await createPredictionAction();
+
+      if (result.ok) {
+        setPredictionId(result.id);
+        setPredictionPersistence({
+          status: "persisted",
+          message: "Prediction request stored.",
+          id: result.id,
+        });
+      } else {
+        setPredictionPersistence({
+          status: "unavailable",
+          message: result.error,
+        });
+      }
+    });
+  }
+
+  function handleSaveObservation() {
+    if (!boardedZone || !crowding) {
+      return;
+    }
+
+    setObservationPersistence({
+      status: "saving",
+      message: "Storing feedback...",
+    });
+
+    startTransition(async () => {
+      const result = await createObservationAction({
+        predictionRequestId: predictionId,
+        boardedZone,
+        crowdingRating: crowding,
+        seatAvailable: crowding <= 2,
+        betterZoneObserved: null,
+      });
+
+      if (result.ok) {
+        setObservationPersistence({
+          status: "persisted",
+          message: "Feedback observation stored.",
+          id: result.id,
+        });
+      } else {
+        setObservationPersistence({
+          status: "unavailable",
+          message: result.error,
+        });
+      }
+    });
+  }
 
   return (
     <main className="min-h-screen overflow-hidden px-4 py-5 sm:px-8 lg:px-12">
@@ -41,11 +117,12 @@ export default function Home() {
             {step === "trains" && (
               <TrainsStep
                 onBack={() => setStep("setup")}
-                onSelect={() => setStep("recommendation")}
+                onSelect={handleTrainSelect}
               />
             )}
             {step === "recommendation" && (
               <RecommendationStep
+                persistence={predictionPersistence}
                 onBack={() => setStep("trains")}
                 onBoarded={() => setStep("feedback")}
               />
@@ -57,6 +134,9 @@ export default function Home() {
                 onBoardedZone={setBoardedZone}
                 onCrowding={setCrowding}
                 onBack={() => setStep("recommendation")}
+                onSave={handleSaveObservation}
+                persistence={observationPersistence}
+                saving={isPending && observationPersistence.status === "saving"}
               />
             )}
           </section>
@@ -179,9 +259,11 @@ function TrainsStep({ onBack, onSelect }: { onBack: () => void; onSelect: () => 
 }
 
 function RecommendationStep({
+  persistence,
   onBack,
   onBoarded,
 }: {
+  persistence: PersistenceState;
   onBack: () => void;
   onBoarded: () => void;
 }) {
@@ -208,6 +290,7 @@ function RecommendationStep({
       </div>
 
       <TrainDiagram />
+      <PersistenceNotice state={persistence} />
 
       <div className="mt-7 grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-3xl bg-white/60 p-5">
@@ -292,14 +375,20 @@ function FeedbackStep({
   onBoardedZone,
   onCrowding,
   onBack,
+  onSave,
+  persistence,
+  saving,
 }: {
   boardedZone: Zone | null;
   crowding: number | null;
   onBoardedZone: (zone: Zone) => void;
   onCrowding: (rating: number) => void;
   onBack: () => void;
+  onSave: () => void;
+  persistence: PersistenceState;
+  saving: boolean;
 }) {
-  const complete = boardedZone && crowding;
+  const complete = Boolean(boardedZone && crowding);
 
   return (
     <div className="animate-[rise_420ms_ease-out]">
@@ -344,14 +433,41 @@ function FeedbackStep({
 
       <div className="mt-8 rounded-3xl bg-white/60 p-5">
         <p className="font-black">
-          {complete ? "Observation ready for storage in Phase 2." : "Static fixture only for Phase 0."}
+          {complete ? "Observation ready to store." : "Choose a zone and rating to store feedback."}
         </p>
         <p className="mt-2 text-sm font-bold text-[var(--muted)]">
-          Phase 0 proves the flow. Phase 2 will persist this against a prediction request.
+          Feedback is stored only when the prediction request was persisted first.
         </p>
       </div>
 
-      <BackButton onClick={onBack} />
+      <PersistenceNotice state={persistence} />
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <BackButton onClick={onBack} />
+        <button
+          className="rounded-2xl bg-[var(--signal)] px-5 py-4 text-base font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--signal-dark)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+          disabled={!complete || saving}
+          onClick={onSave}
+        >
+          {saving ? "Saving..." : "Save feedback"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PersistenceNotice({ state }: { state: PersistenceState }) {
+  const tone =
+    state.status === "persisted"
+      ? "border-[rgb(26_120_84_/_22%)] bg-[rgb(142_207_182_/_24%)] text-[rgb(19_95_66)]"
+      : state.status === "saving"
+        ? "border-[rgb(32_79_122_/_20%)] bg-[rgb(32_79_122_/_9%)] text-[var(--blue)]"
+        : "border-[rgb(180_61_33_/_20%)] bg-[rgb(255_106_61_/_10%)] text-[var(--signal-dark)]";
+
+  return (
+    <div className={`mt-5 rounded-2xl border px-4 py-3 text-sm font-black ${tone}`}>
+      {state.message}
+      {state.id && <span className="ml-2 font-bold opacity-70">ID: {state.id}</span>}
     </div>
   );
 }
