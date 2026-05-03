@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { bedfordPredictionContext, bedfordTrip } from "@/src/lib/fixtures/bedford";
 import { getDashboardRepository } from "@/src/lib/dashboard/drizzle-repository";
 import { buildDashboardSummary, type DashboardSummary } from "@/src/lib/dashboard/summary";
+import { buildMlReadiness, type MlReadinessSummary } from "@/src/lib/ml/readiness";
 import { createObservation, createPrediction } from "@/src/lib/persistence/prediction-service";
 import { getPredictionRepository } from "@/src/lib/persistence/drizzle-repository";
 import type { Zone } from "@/src/lib/prediction/scorer";
@@ -27,6 +28,7 @@ type DashboardActionResult =
   | {
       ok: true;
       summary: DashboardSummary;
+      mlReadiness: MlReadinessSummary;
     }
   | {
       ok: false;
@@ -120,6 +122,7 @@ export async function loadDashboardAction(): Promise<DashboardActionResult> {
     return {
       ok: true,
       summary: buildDashboardSummary(observations),
+      mlReadiness: buildMlReadiness(observations),
     };
   } catch (error) {
     return {

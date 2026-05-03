@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { createObservationAction, createPredictionAction, loadDashboardAction } from "@/app/actions";
 import type { DashboardSummary } from "@/src/lib/dashboard/summary";
 import { bedfordRecommendation, bedfordTrains } from "@/src/lib/fixtures/bedford";
+import type { MlReadinessSummary } from "@/src/lib/ml/readiness";
 import { PLATFORM_DISPLAY_ZONES, type Zone } from "@/src/lib/prediction/scorer";
 
 const zones = PLATFORM_DISPLAY_ZONES;
@@ -17,6 +18,7 @@ type DashboardState = {
   status: "idle" | "loading" | "loaded" | "unavailable" | "error";
   message: string;
   summary?: DashboardSummary;
+  mlReadiness?: MlReadinessSummary;
 };
 const recommendation = bedfordRecommendation;
 const trains = bedfordTrains;
@@ -118,6 +120,7 @@ export default function Home() {
               ? "Dashboard loaded from your saved observations."
               : "No saved observations yet.",
           summary: result.summary,
+          mlReadiness: result.mlReadiness,
         });
       } else {
         setDashboard({
@@ -520,6 +523,7 @@ function DashboardStep({
   onRefresh: () => void;
 }) {
   const summary = dashboard.summary;
+  const mlReadiness = dashboard.mlReadiness;
 
   return (
     <div className="animate-[rise_420ms_ease-out]">
@@ -554,6 +558,51 @@ function DashboardStep({
               detail="Lowest average crowding"
             />
           </div>
+
+          {mlReadiness && (
+            <section className="mt-5 rounded-3xl bg-[linear-gradient(135deg,var(--blue),#173553)] p-5 text-white">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--mint)]">
+                    ML readiness
+                  </h3>
+                  <p className="mt-2 font-serif text-3xl tracking-[-0.05em]">
+                    {formatReadinessStage(mlReadiness.stage)}
+                  </p>
+                  <p className="mt-2 max-w-2xl text-sm font-bold text-white/72">
+                    {mlReadiness.nextMilestone === null
+                      ? "Enough personal labels exist to start experimenting with a small model."
+                      : `${mlReadiness.nextMilestone - mlReadiness.labelsCollected} more labels until: ${mlReadiness.nextMilestoneLabel}`}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white/12 px-4 py-3 text-left sm:text-right">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-white/55">
+                    Labels
+                  </p>
+                  <p className="mt-1 text-3xl font-black">{mlReadiness.labelsCollected}</p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                {mlReadiness.baselineComparisons.map((baseline) => (
+                  <div key={baseline.label} className="rounded-2xl bg-white/10 p-4">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-white/55">
+                      {formatBaselineLabel(baseline.label)}
+                    </p>
+                    <p className="mt-2 text-xl font-black">
+                      {formatCrowding(baseline.averageCrowding)}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-white/62">
+                      {baseline.observationCount} observed / {formatPercent(baseline.comfortableRideRate)} comfortable
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-xs font-bold text-white/58">
+                Baselines use observed boarded zones only; they are an early proxy, not a counterfactual model.
+              </p>
+            </section>
+          )}
 
           <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
             <section className="rounded-3xl bg-[var(--ink)] p-5 text-white">
@@ -735,6 +784,30 @@ function formatCrowding(value: number | null): string {
 
 function formatPercent(value: number | null): string {
   return value === null ? "none" : `${Math.round(value * 100)}%`;
+}
+
+function formatReadinessStage(stage: MlReadinessSummary["stage"]): string {
+  if (stage === "train-small-model") {
+    return "Ready for small-model experiments";
+  }
+
+  if (stage === "compare-baselines") {
+    return "Ready to compare baselines";
+  }
+
+  return "Collecting labels";
+}
+
+function formatBaselineLabel(label: MlReadinessSummary["baselineComparisons"][number]["label"]): string {
+  if (label === "heuristic-followed") {
+    return "Heuristic followed";
+  }
+
+  if (label === "always-middle") {
+    return "Always middle";
+  }
+
+  return "Always rear";
 }
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
