@@ -67,10 +67,10 @@ Recommended repo structure:
 repo/
   app/
   scripts/
-    download_static_gtfs.ts
-    download_socrata_dataset.ts
-    sync_gtfs_realtime.ts
-    import_all.ts
+    download-static-gtfs.ts
+    download-socrata-dataset.ts
+    sync-gtfs-realtime.ts
+    import-all.ts
   data/
     raw/          # gitignored
     processed/    # gitignored
@@ -778,10 +778,10 @@ Scripts should be manifest-driven:
 
 ```text
 scripts/
-  download_static_gtfs.ts
-  download_socrata_dataset.ts
-  sync_gtfs_realtime.ts
-  import_all.ts
+  download-static-gtfs.ts
+  download-socrata-dataset.ts
+  sync-gtfs-realtime.ts
+  import-all.ts
 ```
 
 Developer commands:

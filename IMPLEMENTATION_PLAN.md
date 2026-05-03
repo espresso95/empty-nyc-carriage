@@ -151,7 +151,7 @@ Build:
   - importing `stops.txt`
   - importing `routes.txt`
   - importing MTA station entrances/exits
-  - running all import steps from one `import_all.ts`
+  - running all import steps from one `import-all.ts`
 - Normalize station and complex identifiers.
 - Keep generated station-zone profiles behind an explicit script command.
 - For v1, support two profile modes:
